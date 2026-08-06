@@ -1,15 +1,25 @@
 # Repository Structure
 
 - `arduino/` contains Arduino sketches, hardware-control code, and local Arduino tooling.
-- `web/` is reserved for the future Vue frontend hosted with GitHub Pages.
-- `api/openapi.yaml` is reserved for the OpenAPI description of the endpoints used by the frontend to communicate with the Arduino.
+- `web/` contains the Vue 3 + Vite SPA frontend for controlling the LED strip. Compiled to static files and deployed to GitHub Pages.
+- `api/openapi.yaml` describes the REST API endpoints used by the frontend to communicate with the Arduino.
+- `.github/workflows/` contains CI/CD workflows: `deploy-pages.yml` (production deploy to GitHub Pages on main branch pushes) and `pr-check.yml` (type-check + build on PRs).
 
 # Development Guidelines
 
 - Keep device-specific code and scripts under `arduino/`.
 - Keep frontend code under `web/`.
 - Treat `api/openapi.yaml` as the contract between the frontend and the Arduino-facing API.
+- The Arduino web server now serves only the REST API endpoints (`/api/strip`, `/api/strip/toggle`) plus a minimal landing page at `/` showing the device IP and linking to the GitHub Pages frontend.
+- After changing files in `web/`, run `npm run build` from `web/` to verify the SPA compiles cleanly.
 - Update this file when the repository structure or responsibilities change.
+
+# Frontend deployment
+
+The Vue SPA is deployed to GitHub Pages automatically via `.github/workflows/deploy-pages.yml`:
+- Trigger: push to `main` that changes `web/**` or the workflow file.
+- URL: https://nolanpro.github.io/arduino-lights/
+- For local development, run `npm run dev` from `web/`.
 
 # Raspberry Pi workflow (`nolan-pi`)
 

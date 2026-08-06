@@ -35,6 +35,17 @@ run() {
 }
 
 cd "$SCRIPT_DIR"
+
+# Check that the board is connected on the Pi before compiling
+# echo "==> checking for board ($FQBN) on $PI_HOST..." >&2
+# PI_BOARD_OUTPUT=$(ssh "$PI_HOST" "bash -l -c 'arduino-cli board list' 2>/dev/null" || true)
+# if ! echo "$PI_BOARD_OUTPUT" | grep -q "$FQBN"; then
+#   echo "error: board not found ($FQBN) on $PI_HOST. Is it connected?" >&2
+#   echo "  Connected boards:" >&2
+#   echo "$PI_BOARD_OUTPUT" | sed 's/^/  /' >&2
+#   exit 1
+# fi
+
 echo "build path $BUILD_PATH"
 mkdir -p "$BUILD_PATH"
 

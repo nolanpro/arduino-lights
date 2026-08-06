@@ -1,25 +1,19 @@
-#include <FastLED.h>
+#include "strip_controller.h"
+#include "web_server.h"
 
-#define LED_PIN     2
-#define NUM_LEDS    500  // overestimate until exact count is known
-#define BRIGHTNESS  100  // keep low until power wiring is confirmed
-
-CRGB leds[NUM_LEDS];
+// A decent soft white light is 255,140,23
 
 void setup() {
-  Serial.begin(115200);
-  delay(500);
-  Serial.println(F("StripLightsTest — solid green"));
+  strip_setup();
+  web_setup();
 
-  FastLED.addLeds<WS2811, LED_PIN, BRG>(leds, NUM_LEDS);
-  FastLED.setBrightness(BRIGHTNESS);
-  fill_solid(leds, NUM_LEDS, CRGB::Green);
-  FastLED.show();
-
-  Serial.print(F("LEDs: "));
-  Serial.println(NUM_LEDS);
+  // Power-on default: on, full brightness, rainbow chase
+  // strip_set_scene("solid-white");
+  strip_set_scene("rainbow-chase");
+  strip_on();
 }
 
 void loop() {
-  // solid green — nothing to update
+  strip_loop();
+  web_loop();
 }

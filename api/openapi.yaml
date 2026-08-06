@@ -1,0 +1,344 @@
+openapi: "3.0.3"
+info:
+  title: Arduino LED Strip API
+  version: "1.1.0"
+  description: |
+    API served by the Arduino Uno R4 WiFi for controlling a WS2811 LED strip.
+    The Arduino listens on port 80 for HTTP requests.
+    The frontend (Vue SPA) is hosted separately on GitHub Pages.
+
+servers:
+  - url: http://{arduino-ip}/
+    description: Arduino on your local network
+    variables:
+      arduino-ip:
+        default: 192.168.1.42
+        description: IP address shown on the Arduino's LED matrix
+
+paths:
+  /:
+    get:
+      summary: Landing page
+      description: Returns a simple HTML page showing the API server status and the Arduino's IP address.
+      responses:
+        "200":
+          description: HTML landing page
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /api/strip:
+    get:
+      summary: Get strip status
+      description: Returns whether the LED strip is currently on or off.
+      responses:
+        "200":
+          description: Strip status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StripStatus"
+
+  /api/strip/toggle:
+    post:
+      summary: Toggle strip
+      description: Toggles the LED strip on or off.
+      responses:
+        "200":
+          description: New strip status after toggle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StripStatus"
+
+  /api/strip/scene:
+    get:
+      summary: Get current scene
+      description: Returns the name of the currently active scene.
+      responses:
+        "200":
+          description: Current scene name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SceneStatus"
+
+  /api/strip/scenes:
+    get:
+      summary: List available scenes
+      description: Returns the list of all available scene names.
+      responses:
+        "200":
+          description: Scene list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SceneList"
+
+  /api/strip/scene/{name}:
+    post:
+      summary: Activate a scene
+      description: Switches the LED strip to the named scene.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scene name (e.g. blue-noise, rainbow-chase, single-led, solid-color, rainbow, rainbow-with-glitter, confetti, sinelon, juggle, bpm)
+      responses:
+        "200":
+          description: Scene activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SceneStatus"
+        "404":
+          description: Unknown scene name
+
+  /api/strip/hue:
+    get:
+      summary: Get current hue
+      description: Returns the current hue value (0-359) for the solid-color scene.
+      responses:
+        "200":
+          description: Current hue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HueStatus"
+    post:
+      summary: Set hue
+      description: Sets the hue value (0-359) for the solid-color scene.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - hue
+              properties:
+                hue:
+                  type: integer
+                  minimum: 0
+                  maximum: 359
+                  description: Hue value 0-359
+      responses:
+        "200":
+          description: Hue updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HueStatus"
+
+  /api/strip/pixel/{index}:
+    post:
+      summary: Set single LED pixel
+      description: Sets a single LED pixel to full white and activates the single-led scene.
+      parameters:
+        - name: index
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: LED pixel index
+      responses:
+        "200":
+          description: Pixel set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PixelStatus"
+
+  /api/strip/color:
+    get:
+      summary: Get current color
+      description: Returns the current RGB color for the solid-color scene.
+      responses:
+        "200":
+          description: Current color
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ColorStatus"
+    post:
+      summary: Set color
+      description: Sets the RGB color for the solid-color scene.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - r
+                - g
+                - b
+              properties:
+                r:
+                  type: integer
+                  minimum: 0
+                  maximum: 255
+                  description: Red value 0-255
+                g:
+                  type: integer
+                  minimum: 0
+                  maximum: 255
+                  description: Green value 0-255
+                b:
+                  type: integer
+                  minimum: 0
+                  maximum: 255
+                  description: Blue value 0-255
+      responses:
+        "200":
+          description: Color updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ColorStatus"
+
+  /api/strip/brightness:
+    get:
+      summary: Get current brightness
+      description: Returns the current brightness level of the LED strip.
+      responses:
+        "200":
+          description: Current brightness
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrightnessStatus"
+    post:
+      summary: Set brightness
+      description: Sets the brightness level of the LED strip (0-255).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - brightness
+              properties:
+                brightness:
+                  type: integer
+                  minimum: 0
+                  maximum: 255
+                  description: Brightness level 0-255
+      responses:
+        "200":
+          description: Brightness updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrightnessStatus"
+
+components:
+  schemas:
+    BrightnessStatus:
+      type: object
+      required:
+        - brightness
+      properties:
+        brightness:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: Current brightness level of the LED strip
+      example:
+        brightness: 200
+
+    HueStatus:
+      type: object
+      required:
+        - hue
+      properties:
+        hue:
+          type: integer
+          minimum: 0
+          maximum: 359
+          description: Current hue value for the solid-color scene
+      example:
+        hue: 180
+
+    ColorStatus:
+      type: object
+      required:
+        - r
+        - g
+        - b
+      properties:
+        r:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: Current red value for the solid-color scene
+        g:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: Current green value for the solid-color scene
+        b:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: Current blue value for the solid-color scene
+      example:
+        r: 255
+        g: 128
+        b: 64
+
+    StripStatus:
+      type: object
+      required:
+        - on
+      properties:
+        on:
+          type: boolean
+          description: Whether the LED strip is on
+      example:
+        on: true
+
+    SceneStatus:
+      type: object
+      required:
+        - scene
+      properties:
+        scene:
+          type: string
+          description: The name of the currently active scene
+      example:
+        scene: "blue-noise"
+
+    SceneList:
+      type: object
+      required:
+        - scenes
+      properties:
+        scenes:
+          type: array
+          items:
+            type: string
+          description: Available scene names
+      example:
+        scenes: ["blue-noise", "rainbow-chase", "single-led", "solid-color", "rainbow", "rainbow-with-glitter", "confetti", "sinelon", "juggle", "bpm"]
+
+    PixelStatus:
+      type: object
+      required:
+        - index
+        - scene
+      properties:
+        index:
+          type: integer
+          description: The LED pixel index that was set
+        scene:
+          type: string
+          description: The active scene (always single-led after setting a pixel)
+      example:
+        index: 42
+        scene: "single-led"
