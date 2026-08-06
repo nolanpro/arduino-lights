@@ -1,11 +1,11 @@
 #include "strip_controller.h"
-#include "web_server.h"
+#include "mqtt_handler.h"
 
 // A decent soft white light is 255,140,23
 
 void setup() {
   strip_setup();
-  web_setup();
+  mqtt_setup();
 
   // Power-on default: on, full brightness, rainbow chase
   // strip_set_scene("solid-white");
@@ -15,5 +15,5 @@ void setup() {
 
 void loop() {
   strip_loop();
-  web_loop();
+  mqtt_loop();
 }
