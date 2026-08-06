@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { getStripStatus, toggleStrip, getStoredApiUrl, setStoredApiUrl, getCurrentScene, getScenes, setScene, setPixel, getBrightness, setBrightness, getColor, setColor } from './api'
-import type { StripStatus } from './types'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { connectMqtt, disconnectMqtt, getStoredCredentials, setStoredCredentials, clearStoredCredentials, onStateUpdate, onStatusChange, toggleStrip, setScene, setPixel, setBrightness, setColor, requestState } from './mqtt'
+import type { StripState, MqttStatus } from './types'
 import ColorSliders from './components/ColorSliders.vue'
 
 const on = ref(false)
@@ -10,8 +10,8 @@ const sceneBusy = ref(false)
 const pixelBusy = ref(false)
 const brightnessBusy = ref(false)
 const error = ref('')
-const apiUrl = ref(getStoredApiUrl())
-const showConfig = ref(!apiUrl.value)
+const creds = ref(getStoredCredentials() ?? { username: '', password: '' })
+const showConfig = ref(!getStoredCredentials())
 const scene = ref('')
 const scenes = ref<string[]>([])
 const pixelIndex = ref('')
@@ -21,57 +21,49 @@ const colorR = ref(255)
 const colorG = ref(255)
 const colorB = ref(255)
 const colorBefore = ref({ r: 255, g: 255, b: 255 })
+const mqttStatus = ref<MqttStatus>('disconnected')
 
-async function refresh() {
+let unsubState: (() => void) | null = null
+let unsubStatus: (() => void) | null = null
+
+const availableScenes = [
+  'blue-noise',
+  'rainbow-chase',
+  'single-led',
+  'solid-color',
+  'rainbow',
+  'rainbow-with-glitter',
+  'confetti',
+  'sinelon',
+  'juggle',
+  'bpm',
+]
+
+function handleState(state: StripState) {
+  on.value = state.on
+  brightness.value = state.brightness
+  brightnessBefore.value = state.brightness
+  scene.value = state.scene
+  colorR.value = state.r
+  colorG.value = state.g
+  colorB.value = state.b
+  colorBefore.value = { r: state.r, g: state.g, b: state.b }
+}
+
+async function connect(creds: { username: string; password: string }) {
   try {
     error.value = ''
-    const status: StripStatus = await getStripStatus()
-    on.value = status.on
-    if (status.brightness !== undefined) {
-      brightness.value = status.brightness
-      brightnessBefore.value = status.brightness
-    }
+    mqttStatus.value = 'connecting'
+    await connectMqtt(creds)
+    setStoredCredentials(creds)
+    showConfig.value = false
+    scenes.value = availableScenes
+    // Request initial state from the Arduino
+    await requestState()
   } catch (e: unknown) {
-    on.value = false
-    error.value = e instanceof Error ? e.message : 'Failed to connect'
+    mqttStatus.value = 'error'
+    error.value = e instanceof Error ? e.message : 'Failed to connect to MQTT broker'
     showConfig.value = true
-  }
-}
-
-async function refreshScenes() {
-  try {
-    const result = await getCurrentScene()
-    scene.value = result.scene
-  } catch {
-    // non-critical
-  }
-  try {
-    const result = await getScenes()
-    scenes.value = result.scenes
-  } catch {
-    // non-critical
-  }
-}
-
-async function refreshColor() {
-  try {
-    const result = await getColor()
-    colorR.value = result.r
-    colorG.value = result.g
-    colorB.value = result.b
-    colorBefore.value = { r: result.r, g: result.g, b: result.b }
-  } catch {
-    // non-critical
-  }
-}
-
-async function refreshBrightness() {
-  try {
-    const result = await getBrightness()
-    brightness.value = result.brightness
-    brightnessBefore.value = result.brightness
-  } catch {
-    // non-critical
   }
 }
 
@@ -79,8 +71,7 @@ async function toggle() {
   busy.value = true
   try {
     error.value = ''
-    const status: StripStatus = await toggleStrip()
-    on.value = status.on
+    await toggleStrip()
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : 'Toggle failed'
   } finally {
@@ -97,10 +88,6 @@ async function activateScene(name: string) {
     // Clear pixel index when switching to non-single-led scenes
     if (name !== 'single-led') {
       pixelIndex.value = ''
-    }
-    // Refresh color from device when switching to solid-color
-    if (name === 'solid-color') {
-      await refreshColor()
     }
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : `Failed to set scene`
@@ -169,24 +156,46 @@ async function sendColor() {
   }
 }
 
-function saveUrl() {
-  const trimmed = apiUrl.value.trim()
-  setStoredApiUrl(trimmed)
-  if (trimmed) {
-    showConfig.value = false
-    refresh()
-    refreshScenes()
-    refreshBrightness()
+function saveCredentials() {
+  const trimmedUser = creds.value.username.trim()
+  const trimmedPass = creds.value.password.trim()
+  if (!trimmedUser || !trimmedPass) {
+    error.value = 'Username and password are required'
+    return
   }
+  connect({ username: trimmedUser, password: trimmedPass })
+}
+
+function disconnect() {
+  disconnectMqtt()
+  clearStoredCredentials()
+  showConfig.value = true
+  error.value = ''
 }
 
 onMounted(() => {
-  if (apiUrl.value) {
-    refresh()
-    refreshScenes()
-    refreshBrightness()
-    refreshColor()
+  // Subscribe to state updates
+  unsubState = onStateUpdate(handleState)
+
+  // Subscribe to connection status changes
+  unsubStatus = onStatusChange((status) => {
+    mqttStatus.value = status
+    if (status === 'error' || status === 'disconnected') {
+      showConfig.value = true
+    }
+  })
+
+  // Auto-connect if credentials are stored
+  const stored = getStoredCredentials()
+  if (stored) {
+    connect(stored)
   }
+})
+
+onUnmounted(() => {
+  if (unsubState) unsubState()
+  if (unsubStatus) unsubStatus()
+  disconnectMqtt()
 })
 </script>
 
@@ -195,26 +204,34 @@ onMounted(() => {
     <h1>Strip Lights</h1>
 
     <div v-if="showConfig" class="config-card">
-      <h2>Arduino IP Address</h2>
-      <p class="hint">Enter the IP shown on the Arduino's LED matrix (e.g. <code>192.168.1.42</code>).</p>
-      <form @submit.prevent="saveUrl" class="config-form">
+      <h2>MQTT Credentials</h2>
+      <p class="hint">Enter your HiveMQ Cloud MQTT credentials to connect to the broker.</p>
+      <form @submit.prevent="saveCredentials" class="config-form">
         <input
-          v-model="apiUrl"
+          v-model="creds.username"
           type="text"
-          placeholder="http://192.168.1.42"
+          placeholder="MQTT username"
           class="url-input"
           autofocus
         />
-        <button type="submit" class="btn-primary" :disabled="!apiUrl.trim()">
+        <input
+          v-model="creds.password"
+          type="password"
+          placeholder="MQTT password"
+          class="url-input"
+        />
+        <button type="submit" class="btn-primary" :disabled="!creds.username.trim() || !creds.password.trim()">
           Connect
         </button>
       </form>
+      <p v-if="mqttStatus === 'connecting'" class="status-text">Connecting...</p>
       <p v-if="error" class="error-text">{{ error }}</p>
     </div>
 
     <template v-else>
       <p class="status">
         LED strip: <strong :class="on ? 'on' : 'off'">{{ on ? 'ON' : 'OFF' }}</strong>
+        <span class="mqtt-indicator" :class="mqttStatus">MQTT {{ mqttStatus }}</span>
       </p>
 
       <button
@@ -287,7 +304,7 @@ onMounted(() => {
         </form>
       </div>
 
-      <button class="link-btn" @click="showConfig = true">Change Arduino IP</button>
+      <button class="link-btn" @click="disconnect">Disconnect</button>
     </template>
   </div>
 </template>
@@ -327,6 +344,11 @@ h2 {
 .status {
   margin: 0 0 1.5rem;
   color: #aaa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .status strong {
@@ -339,6 +361,35 @@ h2 {
 
 .status .off {
   color: #888;
+}
+
+.mqtt-indicator {
+  font-size: 0.75rem;
+  padding: 0.15em 0.5em;
+  border-radius: 4px;
+  background: #333;
+  color: #888;
+}
+
+.mqtt-indicator.connected {
+  background: #1b5e20;
+  color: #a5d6a7;
+}
+
+.mqtt-indicator.connecting {
+  background: #e65100;
+  color: #ffcc80;
+}
+
+.mqtt-indicator.error {
+  background: #b71c1c;
+  color: #ef9a9a;
+}
+
+.status-text {
+  color: #aaa;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0;
 }
 
 .config-card {
